@@ -1,15 +1,12 @@
-// 5주차의 in-memory 배열을 실제 MongoDB 조회로 교체했습니다.
-// export하는 타입(Notice)과 함수 시그니처(getNotices/getNotice/createNotice)는
-// 5주차와 완전히 동일합니다.
-
 import { connectDB } from "./mongodb";
-import { Notice as NoticeModel } from "@/models/notices";
+import { Notice as NoticeModel } from "@/models/Notice";
 
 export type Notice = {
   id: string;
   title: string;
-  author: string;
   content: string;
+  authorId: string;
+  authorName: string;
   createdAt: string;
 };
 
@@ -17,8 +14,9 @@ export type Notice = {
 type NoticeDocLike = {
   _id: unknown;
   title: string;
-  author: string;
   content: string;
+  authorId: unknown;
+  authorName: string;
   createdAt?: Date;
 };
 
@@ -26,41 +24,18 @@ function toNotice(doc: NoticeDocLike): Notice {
   return {
     id: String(doc._id),
     title: doc.title,
-    author: doc.author,
     content: doc.content,
+    authorId: String(doc.authorId),
+    authorName: doc.authorName,
     createdAt: (doc.createdAt ?? new Date()).toISOString().slice(0, 10),
   };
 }
 
-// 초기 데이터 자동 추가 (시드 로직)
-async function seedIfEmpty() {
-  const count = await NoticeModel.countDocuments();
-  if (count > 0) return;
-
-  await NoticeModel.insertMany([
-    {
-      title: "웹서버보안프로그래밍 개강 안내",
-      author: "최용진",
-      content:
-        "2학기 웹서버보안프로그래밍 수업이 시작됩니다. 강의계획서를 확인해주세요.",
-    },
-    {
-      title: "GitHub Organization 초대 안내",
-      author: "최용진",
-      content:
-        "과제 제출용 GitHub Organization 초대 메일을 확인하고 가입해주세요.",
-    },
-    {
-      title: "6주차 실습 — MongoDB 연동",
-      author: "최용진",
-      content: "이번 주부터 공지사항 게시판이 실제 데이터베이스에 저장됩니다.",
-    },
-  ]);
-}
-
+// 8주차까지는 컬렉션이 비어있을 때 예시 데이터를 자동으로 채워 넣었지만,
+// 이제는 실제로 로그인한 사용자가 글을 씁니다. 더 이상 가짜 작성자로
+// 시드하지 않고, 대신 화면(app/notices/page.tsx)에서 빈 상태를 안내합니다.
 export async function getNotices(): Promise<Notice[]> {
   await connectDB();
-  await seedIfEmpty();
   const docs = await NoticeModel.find().sort({ createdAt: -1 }).lean();
   return docs.map((doc) => toNotice(doc as NoticeDocLike));
 }
@@ -71,16 +46,23 @@ export async function getNotice(id: string): Promise<Notice | undefined> {
     const doc = await NoticeModel.findById(id).lean();
     return doc ? toNotice(doc as NoticeDocLike) : undefined;
   } catch {
+    // id가 MongoDB ObjectId 형식이 아니면 findById가 에러를 던집니다.
     return undefined;
   }
 }
 
 export async function createNotice(input: {
   title: string;
-  author: string;
   content: string;
+  authorId: string;
+  authorName: string;
 }): Promise<Notice> {
   await connectDB();
   const doc = await NoticeModel.create(input);
   return toNotice(doc);
+}
+
+export async function deleteNotice(id: string): Promise<void> {
+  await connectDB();
+  await NoticeModel.findByIdAndDelete(id);
 }
